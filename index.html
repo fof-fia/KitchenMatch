@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sofia & Sebastian's Kitchen Match</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Quicksand', sans-serif; background-color: #FAF9F6; color: #4A4A4A; height: 100vh; overflow: hidden; }
+        .card-container { position: relative; height: 60vh; width: 90vw; max-width: 400px; margin: 0 auto; }
+        .recipe-card { position: absolute; width: 100%; height: 100%; background: white; border-radius: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); overflow: hidden; transition: transform 0.4s ease, opacity 0.4s; border: 1px solid #E3F2FD; }
+        .btn-round { width: 70px; height: 70px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: 0.2s; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .bg-pastel-blue { background-color: #B9D9EB; }
+        .bg-pastel-pink { background-color: #FADADD; }
+        .tab-active { color: #81B1D1; border-bottom: 3px solid #81B1D1; }
+    </style>
+</head>
+<body class="flex flex-col items-center">
+
+    <!-- User Selector (The 'Login') -->
+    <div id="user-setup" class="fixed inset-0 bg-white z-50 flex flex-col items-center justify-center p-10 text-center">
+        <h2 class="text-2xl font-bold mb-6">Who is cooking today? ✨</h2>
+        <div class="flex gap-4">
+            <button onclick="setUser('Sofia')" class="p-4 bg-blue-50 rounded-2xl border-2 border-blue-100 w-32">Sofia 🌸</button>
+            <button onclick="setUser('Sebastian')" class="p-4 bg-blue-50 rounded-2xl border-2 border-blue-100 w-32">Sebastian 🌿</button>
+        </div>
+    </div>
+
+    <header class="w-full p-4 text-center mt-2">
+        <h1 class="text-xl font-bold text-gray-700">Kitchen Match ✨</h1>
+        <p id="user-display" class="text-[10px] text-blue-300 tracking-widest uppercase"></p>
+    </header>
+
+    <nav class="flex w-full justify-around mb-4 text-xs font-bold text-gray-400">
+        <button onclick="showTab('swipe')" id="tab-swipe" class="pb-2 tab-active">DISCOVER</button>
+        <button onclick="showTab('matches')" id="tab-matches" class="pb-2 uppercase">Our Matches 🥂</button>
+    </nav>
+
+    <!-- Swipe Screen -->
+    <div id="screen-swipe" class="w-full flex flex-col items-center">
+        <div class="card-container" id="cardStack">
+            <div class="p-20 text-center text-gray-300">Searching for yummy veggie food...</div>
+        </div>
+        <div class="flex gap-10 mt-8">
+            <button onclick="handleSwipe('left')" class="btn-round bg-white text-pink-300 text-2xl">✕</button>
+            <button onclick="handleSwipe('right')" class="btn-round bg-pastel-blue text-white text-2xl">♥</button>
+        </div>
+    </div>
+
+    <!-- Matches Screen -->
+    <div id="screen-matches" class="hidden w-full px-6 overflow-y-auto pb-24 h-full">
+        <div id="matches-list" class="grid grid-cols-1 gap-4"></div>
+    </div>
+
+    <script>
+        // CONFIGURATION - PASTE YOUR KEYS HERE
+        const SPOONACULAR_KEY = 'f639ea2bdf674453953de8b6780c9a88';
+        const SUPABASE_URL = 'https://eqkutvtvnytjxcefdujb.supabase.co';
+        const SUPABASE_KEY = 'sb_secret_EFzIMhtrWN6j-67QCcOcEA_6pveRcH2';
+
+        const supabase = bootstrapSupabase();
+        let currentUser = "";
+        let recipes = [];
+        let currentIndex = 0;
+
+        function bootstrapSupabase() {
+            return window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        }
+
+        function setUser(name) {
+            currentUser = name;
+            document.getElementById('user-setup').classList.add('hidden');
+            document.getElementById('user-display').innerText = `Cooking with ${name}`;
+            fetchRecipes();
+        }
+
+        async function fetchRecipes() {
+            const res = await fetch(`https://api.spoonacular.com/recipes/complexSearch?diet=vegetarian&number=20&apiKey=${SPOONACULAR_KEY}`);
+            const data = await res.json();
+            recipes = data.results;
+            renderCard();
+        }
+
+        function renderCard() {
+            const container = document.getElementById('cardStack');
+            if (currentIndex >= recipes.length) {
+                container.innerHTML = `<div class="mt-20 text-center px-10">You've seen all the recipes for now! Check your matches.</div>`;
+                return;
+            }
+            const r = recipes[currentIndex];
+            container.innerHTML = `
+                <div class="recipe-card" id="currentCard">
+                    <img src="${r.image}" class="w-full h-3/4 object-cover">
+                    <div class="p-4 bg-white">
+                        <h3 class="font-bold text-lg leading-tight">${r.title}</h3>
+                        <p class="text-xs text-blue-200 mt-1 uppercase tracking-tighter">Vegetarian Friendly</p>
+                    </div>
+                </div>`;
+        }
+
+        async function handleSwipe(dir) {
+            const card = document.getElementById('currentCard');
+            if (!card) return;
+            
+            const recipe = recipes[currentIndex];
+            card.style.transform = dir === 'right' ? 'translateX(150%) rotate(20deg)' : 'translateX(-150%) rotate(-20deg)';
+            card.style.opacity = '0';
+
+            // Save to Database
+            await supabase.from('swipes').insert([
+                { recipe_id: recipe.id.toString(), user_name: currentUser, choice: dir === 'right' ? 'like' : 'dislike', recipe_title: recipe.title, recipe_image: recipe.image }
+            ]);
+
+            setTimeout(() => { currentIndex++; renderCard(); }, 300);
+        }
+
+        async function showTab(tab) {
+            const swipe = document.getElementById('screen-swipe');
+            const match = document.getElementById('screen-matches');
+            if (tab === 'matches') {
+                swipe.classList.add('hidden');
+                match.classList.remove('hidden');
+                document.getElementById('tab-matches').classList.add('tab-active');
+                document.getElementById('tab-swipe').classList.remove('tab-active');
+                loadMatches();
+            } else {
+                swipe.classList.remove('hidden');
+                match.classList.add('hidden');
+                document.getElementById('tab-swipe').classList.add('tab-active');
+                document.getElementById('tab-matches').classList.remove('tab-active');
+            }
+        }
+
+        async function loadMatches() {
+            const list = document.getElementById('matches-list');
+            list.innerHTML = "Finding what you both liked...";
+
+            // Logic: Get all likes, find ones where BOTH Sofia and Sebastian liked the same ID
+            const { data: allLikes } = await supabase.from('swipes').select('*').eq('choice', 'like');
+            
+            const grouped = allLikes.reduce((acc, row) => {
+                if (!acc[row.recipe_id]) acc[row.recipe_id] = { users: [], data: row };
+                acc[row.recipe_id].users.push(row.user_name);
+                return acc;
+            }, {});
+
+            const bothLiked = Object.values(grouped).filter(item => 
+                item.users.includes('Sofia') && item.users.includes('Sebastian')
+            );
+
+            if (bothLiked.length === 0) {
+                list.innerHTML = "<p class='text-center mt-10 text-gray-400'>No matches yet. Keep swiping!</p>";
+                return;
+            }
+
+            list.innerHTML = bothLiked.map(item => `
+                <div class="flex bg-white p-3 rounded-3xl shadow-sm items-center gap-4 border border-blue-50">
+                    <img src="${item.data.recipe_image}" class="w-20 h-20 rounded-2xl object-cover">
+                    <div class="flex-1">
+                        <h4 class="font-bold text-sm">${item.data.recipe_title}</h4>
+                        <p class="text-[10px] text-blue-300">MATCH! 💖</p>
+                    </div>
+                </div>
+            `).join('');
+        }
+    </script>
+</body>
+</html>
